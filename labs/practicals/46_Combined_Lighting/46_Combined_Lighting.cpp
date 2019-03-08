@@ -9,6 +9,7 @@ map<string, mesh> meshes;
 effect eff;
 texture tex;
 target_camera cam;
+bool enabled = false;
 
 bool load_content() {
   // Create plane mesh
@@ -33,16 +34,25 @@ bool load_content() {
 }
 
 bool update(float delta_time) {
-  
-  if (glfwGetKey(renderer::get_window(), '1')) {
-    cam.set_position(vec3(-50, 10, -50));
-  }
-  
+	
 
+	//enable fixed cam
+	if (glfwGetKey(renderer::get_window(), '1')) {
+		cam.set_position(vec3(-50, 10, -50));
+		enabled = false;
+	}
+	//enable freecam
+	if (glfwGetKey(renderer::get_window(), '2')) {
+		enabled = true;
+	}
+	//if movement is enabled then give control of camera to user
+	if (enabled) {
 
-  cam.update(delta_time);
+	}
 
-  return true;
+	cam.update(delta_time);
+
+	return true;
 }
 
 bool render() {
