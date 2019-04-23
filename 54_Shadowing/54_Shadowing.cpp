@@ -10,8 +10,21 @@ effect main_eff;
 effect shadow_eff;
 texture tex;
 target_camera cam;
+free_camera cam2;
+double cursor_x = 0.0;
+double cursor_y = 0.0;
 spot_light spot;
 shadow_map shadow;
+bool enabled;
+
+bool initialise() {
+	glfwSetInputMode(renderer::get_window(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwGetCursorPos(renderer::get_window(), &cursor_x, &cursor_y);
+	enabled = false;
+	return true;
+}
+
+
 
 bool load_content() {
   // *********************************
@@ -20,6 +33,9 @@ bool load_content() {
   // Create plane mesh
 	meshes["plane"] = mesh(geometry_builder::create_plane());
   // Create "teapot" mesh by loading in models/teapot.obj
+	meshes["sphere"] = mesh(geometry_builder::create_sphere(20, 20));
+	meshes["sphere"].get_transform().scale = vec3(2.5f, 2.5f, 2.5f);
+	meshes["sphere"].get_transform().translate(vec3(0.0f, 13.8f, 0.0f));
 	meshes["teapot"] = mesh(geometry("models/teapot.obj"));
   // Translate Teapot(0,4,0)
 	meshes["teapot"].get_transform().translate(vec3(0.0f, 4.0f, 0.0f));
@@ -46,6 +62,11 @@ bool load_content() {
   meshes["teapot"].get_material().set_diffuse(vec4(1.0f, 0.0f, 0.0f, 1.0f));
   meshes["teapot"].get_material().set_specular(vec4(1.0f, 1.0f, 1.0f, 1.0f));
   meshes["teapot"].get_material().set_shininess(25.0f);
+  //Red sphere
+  meshes["sphere"].get_material().set_emissive(vec4(0.0f, 0.0f, 0.0f, 1.0f));
+  meshes["sphere"].get_material().set_diffuse(vec4(1.0f, 0.0f, 0.0f, 1.0f));
+  meshes["sphere"].get_material().set_specular(vec4(1.0f, 1.0f, 1.0f, 1.0f));
+  meshes["sphere"].get_material().set_shininess(25.0f);
 
   // *******************
   // Set spot properties
@@ -53,7 +74,7 @@ bool load_content() {
   // Pos (20, 30, 0), White
   // Direction (-1, -1, 0) normalized
   // 50 range, 10 power
-  spot.set_position(vec3(30.0f, 20.0f, 0.0f));
+  spot.set_position(vec3(30.0f, 25.0f, 0.0f));
   spot.set_light_colour(vec4(1.0f, 1.0f, 1.0f, 1.0f));
   spot.set_direction(normalize(-spot.get_position()));
   spot.set_range(500.0f);
@@ -75,26 +96,82 @@ bool load_content() {
   cam.set_position(vec3(0.0f, 50.0f, -75.0f));
   cam.set_target(vec3(0.0f, 0.0f, 0.0f));
   cam.set_projection(quarter_pi<float>(), renderer::get_screen_aspect(), 0.1f, 1000.0f);
+  cam2.set_position(vec3(0.0f, 50.0f, -75.0f));
+  cam2.set_target(vec3(0.0f, 0.0f, 0.0f));
+  cam2.set_yaw(135.0f);
+  cam2.set_projection(quarter_pi<float>(), renderer::get_screen_aspect(), 0.1f, 1000.0f);
   return true;
 }
 
 bool update(float delta_time) {
   // Rotate the teapot
   meshes["teapot"].get_transform().rotate(vec3(0.0f, half_pi<float>(), 0.0f) * delta_time);
+  meshes["sphere"].get_transform().rotate(vec3(0.0f, half_pi<float>(), 0.0f) * delta_time);
 
   if (glfwGetKey(renderer::get_window(), '1')) {
     cam.set_position(vec3(0.0f, 50.0f, -75.0f));
+	enabled = false;
   }
   if (glfwGetKey(renderer::get_window(), '2')) {
     cam.set_position(spot.get_position());
+	enabled = false;
   }
   if (glfwGetKey(renderer::get_window(), '3')) {
     cam.set_position(vec3(-25.0, 50.0, 0.0));
+	enabled = false;
   }
   if (glfwGetKey(renderer::get_window(), '4')) {
     cam.set_position(vec3(-50, 2.0, 0));
+	enabled = false;
   }
-  cam.update(delta_time);
+
+
+  if (glfwGetKey(renderer::get_window(), '5')) {
+	  enabled = true;
+  }
+  //if movement is enabled then give control of camera to user
+  if (enabled) {
+	  vec3 transform = vec3(0.0f);
+	  //free cam implementation
+	  static double ratio_width = quarter_pi<float>() / static_cast<float>(renderer::get_screen_width());
+	  static double ratio_height =
+		  (quarter_pi<float>() *
+		  (static_cast<float>(renderer::get_screen_height()) / static_cast<float>(renderer::get_screen_width()))) /
+		  static_cast<float>(renderer::get_screen_height());
+
+	  double current_x = 0.0;
+	  double current_y = 0.0;
+
+	  glfwGetCursorPos(renderer::get_window(), &current_x, &current_y);
+	  double delta_x = current_x - cursor_x;
+	  double delta_y = current_y - cursor_y;
+	  delta_x = delta_x * ratio_width;
+	  delta_y = delta_y * ratio_height;
+
+	  cam2.rotate(delta_x * 3, -delta_y * 3);
+	  //keyboard controls
+	  if (glfwGetKey(renderer::get_window(), 'W')) {
+		  transform = transform + vec3(0.0f, 0.0f, 1.0f);
+	  }
+	  if (glfwGetKey(renderer::get_window(), 'A')) {
+		  transform = transform + vec3(-1.0f, 0.0f, 0.0f);
+	  }
+	  if (glfwGetKey(renderer::get_window(), 'S')) {
+		  transform = transform + vec3(0.0f, 0.0f, -1.0f);
+	  }
+	  if (glfwGetKey(renderer::get_window(), 'D')) {
+		  transform = transform + vec3(1.0f, 0.0f, 0.0f);
+	  }
+	  cam2.move(transform);
+
+	  cam2.update(delta_time);
+	  cursor_x = current_x;
+	  cursor_y = current_y;
+  }
+  else {
+	  cam.update(delta_time);
+  }
+  
 
   // *********************************
   // Update the shadow map light_position from the spot light
@@ -106,7 +183,7 @@ bool update(float delta_time) {
   // *********************************
 
   // Press s to save
-  if (glfwGetKey(renderer::get_window(), 'S') == GLFW_PRESS)
+  if (glfwGetKey(renderer::get_window(), 'P') == GLFW_PRESS)
     shadow.buffer->save("test.png");
 
   return true;
@@ -162,8 +239,20 @@ bool render() {
     auto m = e.second;
     // Create MVP matrix
     auto M = m.get_transform().get_transform_matrix();
-    auto V = cam.get_view();
-    auto P = cam.get_projection();
+	mat4 V;
+	mat4 P;
+	if (enabled) {
+		V = cam2.get_view();
+		P = cam2.get_projection();
+		// Set eye position - Get this from active camera
+		glUniform3fv(main_eff.get_uniform_location("eye_pos"), 1, value_ptr(cam2.get_position()));
+	}
+	else {
+		V = cam.get_view();
+		P = cam.get_projection();
+		// Set eye position - Get this from active camera
+		glUniform3fv(main_eff.get_uniform_location("eye_pos"), 1, value_ptr(cam.get_position()));
+	}
     auto MVP = P * V * M;
     // Set MVP matrix uniform
     glUniformMatrix4fv(main_eff.get_uniform_location("MVP"), // Location of uniform
@@ -192,7 +281,6 @@ bool render() {
 
     // Set eye position
 	glUniform1i(main_eff.get_uniform_location("tex"), 0);
-	glUniform3fv(main_eff.get_uniform_location("eye_pos"), 1, value_ptr(cam.get_position()));
     // Set the shadow_map uniform
 	glUniform1i(main_eff.get_uniform_location("shadow_map"), 1);
     // Render mesh
@@ -208,6 +296,7 @@ void main() {
   app application("54_Shadowing");
   // Set load content, update and render methods
   application.set_load_content(load_content);
+  application.set_initialise(initialise);
   application.set_update(update);
   application.set_render(render);
   // Run application
