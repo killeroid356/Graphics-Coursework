@@ -52,6 +52,7 @@ layout(location = 0) out vec4 colour;
 void main() {
   // *********************************
   float shade;
+  bool done = false;
   vec3 proj_coords = light_space_pos.xyz / light_space_pos.w;
   // Use this to calculate texture coordinates for shadow map
   vec2 shadow_tex_coords;
@@ -61,19 +62,22 @@ void main() {
   // Check shadow coord is in range
   if (shadow_tex_coords.x < 0 || shadow_tex_coords.x > 1 || shadow_tex_coords.y < 0 || shadow_tex_coords.y > 1) {
     shade = 1.0;
+	done = true;
   }
-  float z = 0.5 * proj_coords.z + 0.5;
+  if (!done){
+	float z = 0.5 * proj_coords.z + 0.5;
   // *********************************
   // Now sample the shadow map, return only first component (.x/.r)
-	float depth = texture(shadow_map, shadow_tex_coords).x;
+		float depth = texture(shadow_map, shadow_tex_coords).x;
   // *********************************
   //Check if depth is in range.  Add a slight epsilon for precision
-  if (depth == 0.0) {
-    shade = 1.0;
-  } else if (depth < z + 0.001) {
-    shade = 0.5;
-  } else {
-    shade = 1.0;
+	if (depth == 0.0) {
+		shade = 1.0;
+	} else if (depth < z + 0.001) {
+		shade = 0.5;
+	} else {
+		shade = 1.0;
+	}
   }
 
   vec3 view_dir = normalize(eye_pos - position);
@@ -86,7 +90,7 @@ void main() {
 	// Calculate attenuation value :  (constant + (linear * d) + (quadratic * d * d)
 	// Calculate spot light intensity :  (max( dot(light_dir, -direction), 0))^power
 	// Calculate light colour:  (intensity / attenuation) * light_colour
-	vec4 light_colour = light.light_colour * (pow(max(dot(-light.direction, light_dir),0),light.power)/light.constant + light.linear*d + light.quadratic*d*d);
+	vec4 light_colour = light.light_colour * (pow(max(dot(light_dir, -light.direction),0),light.power)/(light.constant + light.linear*d + light.quadratic*d*d));
 	// *********************************
 	// Now use standard phong shading but using calculated light colour and direction
 	vec4 diffuse = (mat.diffuse_reflection * light_colour) * max(dot(normal, light_dir), 0.0);
@@ -94,7 +98,7 @@ void main() {
 	vec4 specular = (mat.specular_reflection * light_colour) * pow(max(dot(normal, half_vector), 0.0), mat.shininess);
 	
 	colour = ((mat.emissive + diffuse) * tex_colour) + specular;
-	colour.a = 1.0;
+	colour.w = 1.0;
 
   colour = colour * shade;
   colour.w = 1;

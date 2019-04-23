@@ -37,6 +37,6 @@ void main() {
   vertex_position = (M * vec4(position, 1.0)).xyz;
   transformed_normal = N * normal;
   tex_coord_out = tex_coord_in;
-  vertex_light = vec4(position, 1) * lightMVP;
+  vertex_light = vec4(position, 1.0) * lightMVP;
   // *********************************
 }

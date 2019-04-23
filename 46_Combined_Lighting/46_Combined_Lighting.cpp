@@ -74,15 +74,15 @@ bool load_content() {
 
   tex = texture("textures/checker.png");
   //settup the lighting
-  light.set_position(vec3(-5.0f,5.0f,-38.0f));
-  light.set_direction(vec3(-0.8f, -0.6f, 0.6f));
-  light.set_constant_attenuation(0.5f);
-  light.set_linear_attenuation(0.5f);
-  light.set_quadratic_attenuation(0.5f);
-  light.set_range(2000.0f);
+  light.set_position(vec3(30.0f, 20.0f, 0.0f));
+  light.set_direction(vec3(-1.0f, -1.0f, -1.0f));
+  light.set_constant_attenuation(1.0f);
+  light.set_linear_attenuation(1.0f);
+  light.set_quadratic_attenuation(1.0f);
+  light.set_range(5000.0f);
   light.set_light_colour(vec4(0.9f, 0.9f, 0.9f, 1.0f));
-  light.set_power(4.0f);
-
+  light.set_power(2.0f);
+  
 
   // Load in shaders
   eff.add_shader("46_Combined_Lighting/combined_lighting.vert", GL_VERTEX_SHADER);
@@ -110,7 +110,12 @@ bool update(float delta_time) {
 
 	hierarchymeshes[0].get_transform().rotate(vec3(0.0f, 1.0f, 0.0f)*delta_time);
 	hierarchymeshes[1].get_transform().rotate(vec3(1.0f, 0.0f, 0.0f)*delta_time);
-
+	if (glfwGetKey(renderer::get_window(), 'Y')) {
+		light.rotate(vec3(0.0f,0.05f,0.0f));
+	}
+	if (glfwGetKey(renderer::get_window(), 'T')) {
+		light.rotate(vec3(0.0f, -0.05f, 0.0f));
+	}
 	//enable fixed cam
 	if (glfwGetKey(renderer::get_window(), '1')) {
 		enabled = false;
@@ -177,20 +182,21 @@ bool render() {
 	// *********************************
  // Set render target to shadow map
 	renderer::set_render_target(shadow);
- // Clear depth buffer bit
+	// Clear depth buffer bit
 	glClear(GL_DEPTH_BUFFER_BIT);
- // Set face cull mode to front
+	// Set face cull mode to front
 	glCullFace(GL_FRONT);
- // *********************************
-
- // We could just use the Camera's projection, 
- // but that has a narrower FoV than the cone of the spot light, so we would get clipping.
- // so we have yo create a new Proj Mat with a field of view of 90.
+	// *********************************
+	   //glEnable(GL_BLEND);
+	// We could just use the Camera's projection, 
+	// but that has a narrower FoV than the cone of the spot light, so we would get clipping.
+	// so we have yo create a new Proj Mat with a field of view of 90.
 	mat4 LightProjectionMat = perspective<float>(90.0f, renderer::get_screen_aspect(), 0.1f, 1000.f);
 
 	// Bind shader
 	renderer::bind(shadow_eff);
 	// Render meshes
+	
 	for (auto &e : meshes) {
 		auto m = e.second;
 		// Create MVP matrix
@@ -209,23 +215,39 @@ bool render() {
 		renderer::render(m);
 	}
 	
-
+	for (size_t i = 0; i < hierarchymeshes.size(); i++) {
+		auto m = hierarchymeshes[i];
+		auto M = m.get_transform().get_transform_matrix();
+		for (size_t j = i; j > 0; j--) {
+			M = hierarchymeshes[j - 1].get_transform().get_transform_matrix() * M;
+		}
+		// *********************************
+		// View matrix taken from shadow map
+		auto V = shadow.get_view();
+		// *********************************
+		auto MVP = LightProjectionMat * V * M;
+		// Set MVP matrix uniform
+		glUniformMatrix4fv(shadow_eff.get_uniform_location("MVP"), // Location of uniform
+			1,                                      // Number of values - 1 mat4
+			GL_FALSE,                               // Transpose the matrix?
+			value_ptr(MVP));                        // Pointer to matrix data
+// Render mesh
+		renderer::render(m);
+	}
+	
 	// *********************************
   // Set render target back to the screen
 	renderer::set_render_target();
-  // Set face cull mode to back
+	// Set face cull mode to back
 	glCullFace(GL_BACK);
-  // *********************************
-	
-
+	// *********************************
 
   // Render meshes
 int count = 0;
+renderer::bind(eff);
 
 for (auto &e : meshes) {
 	auto m = e.second;
-	// Bind effect
-	renderer::bind(eff);
 	// Create MVP matrix
 	auto M = m.get_transform().get_transform_matrix();
 	mat4 V;
@@ -251,13 +273,26 @@ for (auto &e : meshes) {
 	glUniformMatrix4fv(eff.get_uniform_location("M"), 1, GL_FALSE, value_ptr(M));
 	// Set N matrix uniform - remember - 3x3 matrix
 	glUniformMatrix3fv(eff.get_uniform_location("N"), 1, GL_FALSE, value_ptr(m.get_transform().get_normal_matrix()));
+
+	// Set lightMVP uniform, using:
+	//Model matrix from m
+	auto lM = m.get_transform().get_transform_matrix();
+	// viewmatrix from the shadow map
+	auto lV = shadow.get_view();
+	// Multiply together with LightProjectionMat
+	auto LMVP = LightProjectionMat * lV * lM;
+	// Set uniform
+	glUniformMatrix4fv(eff.get_uniform_location("lightMVP"), 1, GL_FALSE, value_ptr(LMVP));
+
 	//bind some stuff and hope it works
 	renderer::bind(m.get_material(), "mat");
 	renderer::bind(light, "light");
-	renderer::bind(tex, 10);
+	renderer::bind(tex, 0);
+	renderer::bind(shadow.buffer->get_depth(), 1);
 
 	//set tex uniform
 	glUniform1i(eff.get_uniform_location("tex"), 0);
+	glUniform1i(eff.get_uniform_location("shadow_map"), 1);
     // *********************************
     // Render mesh
     renderer::render(m);
@@ -266,8 +301,6 @@ for (auto &e : meshes) {
   count = 0;
   for (size_t i = 0; i < hierarchymeshes.size(); i++) {
 	  auto m = hierarchymeshes[i];
-	  // Bind effect
-	  renderer::bind(eff);
 	  // Create MVP matrix
 	  auto M = m.get_transform().get_transform_matrix();
 	  mat4 V;
@@ -301,7 +334,7 @@ for (auto &e : meshes) {
    // viewmatrix from the shadow map
 	  auto lV = shadow.get_view();
    // Multiply together with LightProjectionMat
-	  auto LMVP = lM * lV * LightProjectionMat;
+	  auto LMVP = LightProjectionMat * lV * lM;
    // Set uniform
 	  glUniformMatrix4fv(eff.get_uniform_location("lightMVP"), 1, GL_FALSE, value_ptr(LMVP));
 
@@ -311,7 +344,7 @@ for (auto &e : meshes) {
 	  //bind some stuff and hope it works
 	  renderer::bind(m.get_material(), "mat");
 	  renderer::bind(light, "light");
-	  renderer::bind(tex, 10);
+	  renderer::bind(tex, 0);
 	  renderer::bind(shadow.buffer->get_depth(), 1);
 	  //set tex uniform
 	  glUniform1i(eff.get_uniform_location("tex"), 0);
